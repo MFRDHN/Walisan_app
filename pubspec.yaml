@@ -1,0 +1,30 @@
+name: walisan_app_andro
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  cupertino_icons: ^1.0.8
+  equatable: ^2.0.8
+  flutter:
+    sdk: flutter
+  flutter_bloc: ^9.1.1
+  font_awesome_flutter: ^10.7.0
+  http: ^1.2.0
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+
+  # Menambahkan folder assets untuk logo dan gambar
+  assets:
+    - assets/images/LOGOOO.png
+    - assets/images/kaligrafi.png
