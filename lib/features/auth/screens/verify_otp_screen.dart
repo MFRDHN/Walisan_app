@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../bloc/verify_otp_bloc.dart';
 import '../bloc/verify_otp_event.dart';
 import '../bloc/verify_otp_state.dart';
@@ -42,10 +43,10 @@ class VerifyOtpView extends StatefulWidget {
 
 class _VerifyOtpViewState extends State<VerifyOtpView> {
   final List<TextEditingController> _controllers = List.generate(
-    4,
+    6,
     (_) => TextEditingController(),
   );
-  final List<FocusNode> _focusNodes = List.generate(4, (_) => FocusNode());
+  final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
   int _resendCountdown = 10;
   Timer? _timer;
 
@@ -80,7 +81,7 @@ class _VerifyOtpViewState extends State<VerifyOtpView> {
   }
 
   void _onChanged(int index, String value) {
-    if (value.isNotEmpty && index < 3) {
+    if (value.isNotEmpty && index < 5) {
       _focusNodes[index + 1].requestFocus();
     }
   }
@@ -89,10 +90,10 @@ class _VerifyOtpViewState extends State<VerifyOtpView> {
 
   void _onKonfirmasi() {
     final otp = _otp;
-    if (otp.length != 4) {
+    if (otp.length != 6) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Masukkan kode 4 digit')));
+      ).showSnackBar(const SnackBar(content: Text('Masukkan kode 6 digit')));
       return;
     }
     context.read<VerifyOtpBloc>().add(
@@ -111,6 +112,26 @@ class _VerifyOtpViewState extends State<VerifyOtpView> {
     _startCountdown();
     context.read<VerifyOtpBloc>().add(
       ResendOtpRequested(userId: widget.userId),
+    );
+  }
+
+  Future<void> _onVerifyOtpSuccess(
+    BuildContext context,
+    VerifyOtpSuccess state,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('token', state.loginResponse.token);
+    final loginData = jsonEncode({
+      'user': state.loginResponse.user.toJson(),
+      'student': state.loginResponse.student?.toJson(),
+      'token': state.loginResponse.token,
+    });
+    if (!context.mounted) return;
+    Navigator.pushNamedAndRemoveUntil(
+      context,
+      '/home',
+      (route) => false,
+      arguments: loginData,
     );
   }
 
@@ -153,18 +174,7 @@ class _VerifyOtpViewState extends State<VerifyOtpView> {
                       SnackBar(content: Text(state.message)),
                     );
                   } else if (state is VerifyOtpSuccess) {
-                    final loginData = jsonEncode({
-                      'user': state.loginResponse.user.toJson(),
-                      'student':
-                          state.loginResponse.student?.toJson(),
-                      'token': state.loginResponse.token,
-                    });
-                    Navigator.pushNamedAndRemoveUntil(
-                      context,
-                      '/home',
-                      (route) => false,
-                      arguments: loginData,
-                    );
+                    _onVerifyOtpSuccess(context, state);
                   }
                 },
                 builder: (context, state) {
@@ -246,51 +256,63 @@ class _VerifyOtpViewState extends State<VerifyOtpView> {
                               ),
                               const SizedBox(height: 32),
                               Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceEvenly,
-                                children: List.generate(4, (index) {
-                                  return SizedBox(
-                                    width: 60,
-                                    height: 60,
-                                    child: TextFormField(
-                                      controller: _controllers[index],
-                                      focusNode: _focusNodes[index],
-                                      onChanged:
-                                          (v) => _onChanged(index, v),
-                                      textAlign: TextAlign.center,
-                                      keyboardType: TextInputType.number,
-                                      maxLength: 1,
-                                      inputFormatters: [
-                                        FilteringTextInputFormatter
-                                            .digitsOnly,
-                                      ],
-                                      style: const TextStyle(
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.w600,
-                                        color: Color(0xFF111827),
-                                      ),
-                                      decoration: InputDecoration(
-                                        counterText: '',
-                                        filled: true,
-                                        fillColor:
-                                            const Color(0xFFF3F4F6),
-                                        contentPadding: EdgeInsets.zero,
-                                        border: OutlineInputBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(12),
-                                          borderSide: BorderSide.none,
-                                        ),
-                                        enabledBorder: OutlineInputBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(12),
-                                          borderSide: BorderSide.none,
-                                        ),
-                                        focusedBorder: OutlineInputBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(12),
-                                          borderSide: const BorderSide(
-                                            color: Color(0xFF0D9488),
-                                            width: 1.5,
+                                children: List.generate(6, (index) {
+                                  return Expanded(
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 4),
+                                      child: SizedBox(
+                                        height: 60,
+                                        child: TextFormField(
+                                          controller:
+                                              _controllers[index],
+                                          focusNode: _focusNodes[index],
+                                          onChanged: (v) =>
+                                              _onChanged(index, v),
+                                          textAlign: TextAlign.center,
+                                          keyboardType:
+                                              TextInputType.number,
+                                          maxLength: 1,
+                                          inputFormatters: [
+                                            FilteringTextInputFormatter
+                                                .digitsOnly,
+                                          ],
+                                          style: const TextStyle(
+                                            fontSize: 22,
+                                            fontWeight: FontWeight.w600,
+                                            color: Color(0xFF111827),
+                                          ),
+                                          decoration: InputDecoration(
+                                            counterText: '',
+                                            filled: true,
+                                            fillColor:
+                                                const Color(0xFFF3F4F6),
+                                            contentPadding:
+                                                EdgeInsets.zero,
+                                            border: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(
+                                                      12),
+                                              borderSide: BorderSide.none,
+                                            ),
+                                            enabledBorder:
+                                                OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(
+                                                      12),
+                                              borderSide: BorderSide.none,
+                                            ),
+                                            focusedBorder:
+                                                OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(
+                                                      12),
+                                              borderSide:
+                                                  const BorderSide(
+                                                color: Color(0xFF0D9488),
+                                                width: 1.5,
+                                              ),
+                                            ),
                                           ),
                                         ),
                                       ),

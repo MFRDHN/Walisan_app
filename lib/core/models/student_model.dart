@@ -47,14 +47,14 @@ class StudentModel {
 
   factory StudentModel.fromJson(Map<String, dynamic> json) {
     return StudentModel(
-      id: json['id'] as int,
-      userId: json['user_id'] as int,
-      name: json['name'] as String,
-      nis: json['nis'] as String,
-      nisn: json['nisn'] as String,
-      studentClass: json['class'] as String,
+      id: json['id'] as int? ?? 0,
+      userId: json['user_id'] as int? ?? 0,
+      name: json['name'] as String? ?? '',
+      nis: json['nis'] as String? ?? '',
+      nisn: json['nisn'] as String? ?? '',
+      studentClass: json['class'] as String? ?? '',
       room: json['room'] as String? ?? '',
-      enrollmentYear: json['enrollment_year'] as String,
+      enrollmentYear: json['enrollment_year'] as String? ?? '',
       fatherName: json['father_name'] as String? ?? '',
       motherName: json['mother_name'] as String? ?? '',
       fatherPhone: json['father_phone'] as String? ?? '',

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../bloc/login_bloc.dart';
 import '../bloc/login_event.dart';
 import '../bloc/login_state.dart';
@@ -36,6 +37,22 @@ class _SignInViewState extends State<SignInView> {
     super.dispose();
   }
 
+  Future<void> _handleLoginSuccess(
+    BuildContext context,
+    LoginSuccess state,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('token', state.loginResponse.token);
+
+    if (!context.mounted) return;
+    final loginData = jsonEncode({
+      'user': state.loginResponse.user.toJson(),
+      'student': state.loginResponse.student?.toJson(),
+      'token': state.loginResponse.token,
+    });
+    Navigator.pushNamed(context, '/home', arguments: loginData);
+  }
+
   void _onMasuk() {
     FocusScope.of(context).unfocus();
     context.read<LoginBloc>().add(
@@ -63,12 +80,7 @@ class _SignInViewState extends State<SignInView> {
             SnackBar(content: Text(state.error), backgroundColor: Colors.red),
           );
         } else if (state is LoginSuccess) {
-          final loginData = jsonEncode({
-            'user': state.loginResponse.user.toJson(),
-            'student': state.loginResponse.student?.toJson(),
-            'token': state.loginResponse.token,
-          });
-          Navigator.pushNamed(context, '/home', arguments: loginData);
+          _handleLoginSuccess(context, state);
         }
       },
       builder: (context, state) {

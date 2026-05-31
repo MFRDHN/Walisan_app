@@ -24,8 +24,7 @@ class VerifyOtpBloc extends Bloc<VerifyOtpEvent, VerifyOtpState> {
       final response = await _apiClient.post(
         ApiConfig.verifyOtp,
         body: {
-          'user_id': event.userId.toString(),
-          'otp_code': event.otpCode,
+          'otp': event.otpCode,
         },
       );
 
@@ -46,9 +45,6 @@ class VerifyOtpBloc extends Bloc<VerifyOtpEvent, VerifyOtpState> {
     try {
       final response = await _apiClient.post(
         ApiConfig.resendOtp,
-        body: {
-          'user_id': event.userId.toString(),
-        },
       );
 
       final message = response['message'] as String? ?? 'Kode OTP telah dikirim ulang';

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/utils/validators.dart';
 import '../../../shared/widgets/custom_text_field.dart';
 import '../bloc/register_bloc.dart';
@@ -56,6 +57,23 @@ class _SignUpViewState extends State<SignUpView> {
     );
   }
 
+  Future<void> _onRegisterSuccess(
+    BuildContext context,
+    RegisterSuccess state,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('token', state.registerResponse.token);
+    if (!context.mounted) return;
+    Navigator.pushNamed(
+      context,
+      '/verify-otp',
+      arguments: {
+        'user_id': state.registerResponse.userId,
+        'phone': state.registerResponse.phone,
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -91,14 +109,7 @@ class _SignUpViewState extends State<SignUpView> {
                       ),
                     );
                   } else if (state is RegisterSuccess) {
-                    Navigator.pushNamed(
-                      context,
-                      '/verify-otp',
-                      arguments: {
-                        'user_id': state.registerResponse.userId,
-                        'phone': state.registerResponse.phone,
-                      },
-                    );
+                    _onRegisterSuccess(context, state);
                   }
                 },
                 builder: (context, state) {
@@ -232,9 +243,11 @@ class _SignUpViewState extends State<SignUpView> {
                                   hint: 'Ulangi password',
                                   controller: _confirmPasswordController,
                                   obscureText: true,
-                                  validator: Validators.confirmPassword(
-                                    _passwordController.text,
-                                  ),
+                              validator: (value) {
+                                return Validators.confirmPassword(
+                                  _passwordController.text,
+                                )(value);
+                              },
                                   prefixIcon: const Icon(
                                     Icons.lock_outline,
                                     color: Color(0xFF6B7280),

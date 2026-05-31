@@ -1,254 +1,505 @@
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_text_styles.dart';
-import '../../../core/constants/app_strings.dart';
-import '../../../shared/widgets/custom_button.dart';
-import '../../../shared/widgets/custom_text_field.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:intl/intl.dart';
+import '../../../core/models/savings_model.dart';
+import '../bloc/savings_bloc.dart';
+import '../bloc/savings_event.dart';
+import '../bloc/savings_state.dart';
+import 'topup_saldo_page.dart';
 
-class SavingsScreen extends StatefulWidget {
+class SavingsScreen extends StatelessWidget {
   const SavingsScreen({super.key});
 
   @override
-  State<SavingsScreen> createState() => _SavingsScreenState();
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (_) => SavingsBloc()..add(SavingsFetch()),
+      child: const _SavingsView(),
+    );
+  }
 }
 
-class _SavingsScreenState extends State<SavingsScreen> {
-  final _amountController = TextEditingController();
+class _SavingsView extends StatefulWidget {
+  const _SavingsView();
+
+  @override
+  State<_SavingsView> createState() => _SavingsViewState();
+}
+
+class _SavingsViewState extends State<_SavingsView>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+
+  static const Color hijauUtama = Color(0xFF0EB89A);
+  static const Color hijauTua = Color(0xFF0A9688);
+
+  final List<String> _monthNames = [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ];
+
+  final formatRupiah = NumberFormat.currency(
+    locale: 'id_ID',
+    symbol: 'Rp ',
+    decimalDigits: 0,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+    _fadeAnimation = CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeOut,
+    );
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.06),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeOut,
+    ));
+    _animationController.forward();
+  }
 
   @override
   void dispose() {
-    _amountController.dispose();
+    _animationController.dispose();
     super.dispose();
   }
 
-  final List<Map<String, dynamic>> _savingsHistory = [
-    {'date': '1 Mei 2026', 'amount': '+ Rp 500.000', 'type': 'Setor'},
-    {'date': '25 Apr 2026', 'amount': '+ Rp 300.000', 'type': 'Setor'},
-    {'date': '15 Apr 2026', 'amount': '- Rp 150.000', 'type': 'Tarik'},
-    {'date': '5 Apr 2026', 'amount': '+ Rp 750.000', 'type': 'Setor'},
-  ];
-
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: Text(AppStrings.savings, style: AppTextStyles.headingMedium),
-        backgroundColor: AppColors.background,
-        elevation: 0,
+    return BlocConsumer<SavingsBloc, SavingsState>(
+      listener: (context, state) {
+        if (state is SavingsFailure) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(state.error), backgroundColor: Colors.red),
+          );
+        }
+      },
+      builder: (context, state) {
+        final data = state is SavingsLoaded ? state.data : null;
+        final history = state is SavingsLoaded ? state.history : <SavingsTransaction>[];
+        final monthlyIncome = state is SavingsLoaded ? state.monthlyIncome : 0;
+        final monthlyExpense = state is SavingsLoaded ? state.monthlyExpense : 0;
+        final isLoading = state is SavingsLoading;
+
+        return Scaffold(
+          backgroundColor: Colors.white,
+          appBar: AppBar(
+            backgroundColor: Colors.white,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                  color: Colors.black87, size: 20),
+              onPressed: () => Navigator.pop(context),
+            ),
+            centerTitle: false,
+            title: const Text('Tabungan',
+                style: TextStyle(
+                    color: Colors.black87,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700)),
+          ),
+          body: isLoading
+              ? const Center(
+                  child: CircularProgressIndicator(color: hijauUtama))
+              : RefreshIndicator(
+                  onRefresh: () async {
+                    context.read<SavingsBloc>().add(SavingsFetch());
+                  },
+                  color: hijauUtama,
+                  backgroundColor: Colors.white,
+                  child: FadeTransition(
+                    opacity: _fadeAnimation,
+                    child: SlideTransition(
+                      position: _slideAnimation,
+                      child: SingleChildScrollView(
+                        physics: const BouncingScrollPhysics(),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildKartuSaldo(
+                                  data, monthlyIncome, monthlyExpense),
+                              const SizedBox(height: 24),
+                              _buildHeaderRiwayat(),
+                              const SizedBox(height: 10),
+                              _buildDaftarTransaksi(history),
+                              const SizedBox(height: 20),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+        );
+      },
+    );
+  }
+
+  Widget _buildKartuSaldo(
+      SavingsData? data, int monthlyIncome, int monthlyExpense) {
+    final balance = data?.balance ?? 0;
+    final name = data?.studentName ?? 'Santri';
+    final limit = data?.dailyLimit ?? 0;
+    final pocket = data?.pocketMoney ?? 0;
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [hijauUtama, hijauTua],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: hijauUtama.withOpacity(0.4),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Balance card
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [AppColors.secondary, AppColors.secondaryDark],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+            Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.25),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.account_balance_wallet_rounded,
+                      color: Colors.white, size: 20),
                 ),
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.secondary.withValues(alpha: 0.3),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    AppStrings.myBalance,
-                    style: AppTextStyles.bodyMedium
-                        .copyWith(color: Colors.white70),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Rp 5.300.000',
-                    style: AppTextStyles.displayLarge
-                        .copyWith(color: Colors.white),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () => _showDepositSheet(context),
-                          icon: const Icon(Icons.add, size: 18),
-                          label: const Text('Setor'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: AppColors.secondary,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () => _showWithdrawSheet(context),
-                          icon: const Icon(Icons.remove, size: 18),
-                          label: const Text('Tarik'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white.withValues(alpha: 0.2),
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            // Savings goal
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                      color: AppColors.shadow,
-                      blurRadius: 8,
-                      offset: const Offset(0, 2)),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Target Tabungan',
-                          textAlign: TextAlign.center,
-                          style: AppTextStyles.headingSmall),
-                      Text('53%',
-                          style: AppTextStyles.headingSmall.copyWith(
-                              color: AppColors.primary)),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text('Rp 5.300.000 / Rp 10.000.000',
-                      style: AppTextStyles.bodySmall),
-                  const SizedBox(height: 10),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: LinearProgressIndicator(
-                      value: 0.53,
-                      backgroundColor: AppColors.border,
-                      color: AppColors.primary,
-                      minHeight: 10,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text('Riwayat Tabungan',
-                textAlign: TextAlign.center,
-                style: AppTextStyles.headingSmall),
-            const SizedBox(height: 12),
-            ..._savingsHistory.map((h) {
-              final isDeposit = (h['type'] as String) == 'Setor';
-              return Container(
-                margin: const EdgeInsets.only(bottom: 10),
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                        color: AppColors.shadow,
-                        blurRadius: 4,
-                        offset: const Offset(0, 2)),
-                  ],
-                ),
-                child: Row(
+                const SizedBox(width: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: (isDeposit
-                                ? AppColors.success
-                                : AppColors.error)
-                            .withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(
-                        isDeposit
-                            ? Icons.arrow_downward_rounded
-                            : Icons.arrow_upward_rounded,
-                        color: isDeposit
-                            ? AppColors.success
-                            : AppColors.error,
-                        size: 18,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(h['type'] as String,
-                              style: AppTextStyles.labelMedium),
-                          Text(h['date'] as String,
-                              style: AppTextStyles.caption),
-                        ],
-                      ),
-                    ),
-                    Text(
-                      h['amount'] as String,
-                      style: AppTextStyles.labelMedium.copyWith(
-                        color: isDeposit
-                            ? AppColors.success
-                            : AppColors.error,
-                      ),
-                    ),
+                    Text('Saldo Tabungan -',
+                        style: TextStyle(
+                            color: Colors.white.withOpacity(0.85),
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w500)),
+                    Text(name,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w700)),
                   ],
                 ),
-              );
-            }),
-            const SizedBox(height: 32),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Text(formatRupiah.format(balance),
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 34,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5)),
+            const SizedBox(height: 4),
+            Text(
+                'Limit Jajan : ${formatRupiah.format(limit)}  |  Uang Jajan: ${formatRupiah.format(pocket)}',
+                style: TextStyle(
+                    color: Colors.white.withOpacity(0.7), fontSize: 11)),
+            const SizedBox(height: 10),
+            Text('Rekap Bulan ${_monthNames[DateTime.now().month - 1]}',
+                style: TextStyle(
+                    color: Colors.white.withOpacity(0.65),
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w500)),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildStatBox(
+                    icon: Icons.arrow_downward_rounded,
+                    label: 'Pemasukan',
+                    nilai: formatRupiah.format(monthlyIncome),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _buildStatBox(
+                    icon: Icons.arrow_upward_rounded,
+                    label: 'Pengeluaran',
+                    nilai: formatRupiah.format(monthlyExpense),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildCardButton(
+                    icon: Icons.add_rounded,
+                    label: 'Top Up Saldo',
+                    onTap: () => _showTopUpDialog(context, data?.balance ?? 0),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _buildCardButton(
+                    icon: Icons.tune_rounded,
+                    label: 'Update Limit Jajan',
+                    onTap: () => _showLimitDialog(context, data),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
     );
   }
 
-  void _showDepositSheet(BuildContext context) {
-    _showAmountSheet(context, 'Setor Tabungan', AppColors.secondary);
+  Widget _buildStatBox({
+    required IconData icon,
+    required String label,
+    required String nilai,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: Colors.white, size: 16),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label,
+                  style: TextStyle(
+                      color: Colors.white.withOpacity(0.75), fontSize: 10.5)),
+              Text(nilai,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700)),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
-  void _showWithdrawSheet(BuildContext context) {
-    _showAmountSheet(context, 'Tarik Tabungan', AppColors.error);
+  Widget _buildCardButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        splashColor: Colors.white24,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            border:
+                Border.all(color: Colors.white.withOpacity(0.5), width: 1.2),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: Colors.white, size: 16),
+              const SizedBox(width: 5),
+              Text(label,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
-  void _showAmountSheet(BuildContext context, String title, Color color) {
+  Widget _buildHeaderRiwayat() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        const Text('Riwayat Transaksi',
+            style: TextStyle(
+                color: Colors.black87,
+                fontSize: 16,
+                fontWeight: FontWeight.w700)),
+        TextButton(
+          onPressed: () {},
+          child: const Text('Lihat Semua',
+              style: TextStyle(
+                  color: hijauUtama,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDaftarTransaksi(List<SavingsTransaction> history) {
+    if (history.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 32),
+        child: Column(
+          children: [
+            Icon(Icons.receipt_long_outlined,
+                color: Colors.black.withOpacity(0.15), size: 40),
+            const SizedBox(height: 8),
+            Text('Belum ada transaksi',
+                style: TextStyle(
+                    color: Colors.black.withOpacity(0.35), fontSize: 13)),
+          ],
+        ),
+      );
+    }
+
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: history.length,
+      separatorBuilder: (_, __) => const Divider(
+        color: Color(0xFFF0F0F0),
+        height: 1,
+      ),
+      itemBuilder: (context, index) {
+        return _buildItemTransaksi(history[index]);
+      },
+    );
+  }
+
+  Widget _buildItemTransaksi(SavingsTransaction trx) {
+    final tanggalFmt = trx.date.length >= 10
+        ? trx.date.substring(0, 10).split('-').reversed.join('-')
+        : trx.date;
+    final bool isDebit = trx.isDebit;
+    final Color warnaJumlah =
+        isDebit ? const Color(0xFFE53935) : hijauUtama;
+    final String prefixJumlah = isDebit ? '-' : '+';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: warnaJumlah.withOpacity(0.4),
+                width: 1.5,
+              ),
+            ),
+            child: Icon(
+              isDebit
+                  ? Icons.arrow_upward_rounded
+                  : Icons.arrow_downward_rounded,
+              color: warnaJumlah,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(trx.description,
+                    style: const TextStyle(
+                        color: Colors.black87,
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600)),
+                const SizedBox(height: 3),
+                Text(tanggalFmt,
+                    style: TextStyle(
+                        color: Colors.black.withOpacity(0.4),
+                        fontSize: 11.5)),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text('$prefixJumlah${formatRupiah.format(trx.amount)}',
+                  style: TextStyle(
+                      color: warnaJumlah,
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700)),
+              const SizedBox(height: 3),
+              Text('Saldo ${formatRupiah.format(trx.balanceAfter)}',
+                  style: TextStyle(
+                      color: Colors.black.withOpacity(0.38), fontSize: 11)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showTopUpDialog(BuildContext context, int balance) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TopUpSaldoPage(currentBalance: balance),
+      ),
+    );
+    if (context.mounted) {
+      context.read<SavingsBloc>().add(SavingsFetch());
+    }
+  }
+
+  void _showLimitDialog(BuildContext context, SavingsData? data) {
+    final controller = TextEditingController(
+      text: data?.dailyLimit.toString() ?? '',
+    );
+    bool isLoading = false;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: const BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 24,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -256,36 +507,92 @@ class _SavingsScreenState extends State<SavingsScreen> {
             children: [
               Center(
                 child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                        color: AppColors.border,
-                        borderRadius: BorderRadius.circular(2))),
-              ),
-              const SizedBox(height: 20),
-              Text(title,
-                  textAlign: TextAlign.center,
-                  style: AppTextStyles.headingMedium),
-              const SizedBox(height: 16),
-              CustomTextField(
-                label: 'Jumlah',
-                hint: 'Masukkan jumlah',
-                controller: _amountController,
-                keyboardType: TextInputType.number,
-                prefixIcon: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12),
-                  child: Text('Rp',
-                      style: TextStyle(
-                          color: AppColors.textSecondary,
-                          fontWeight: FontWeight.w500)),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.black12,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
                 ),
               ),
               const SizedBox(height: 20),
-              CustomButton(
-                label: title,
-                onPressed: () => Navigator.pop(context),
+              const Text('Update Limit Jajan',
+                  style: TextStyle(
+                      color: Colors.black87,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              Text(
+                  'Limit saat ini: ${formatRupiah.format(data?.dailyLimit ?? 0)} / hari',
+                  style:
+                      const TextStyle(color: Colors.black45, fontSize: 13)),
+              const SizedBox(height: 16),
+              TextField(
+                controller: controller,
+                keyboardType: TextInputType.number,
+                style: const TextStyle(color: Colors.black87),
+                decoration: InputDecoration(
+                  hintText: 'Masukkan limit baru',
+                  hintStyle: const TextStyle(color: Colors.black38),
+                  prefixText: 'Rp ',
+                  prefixStyle: const TextStyle(
+                      color: Colors.black87, fontWeight: FontWeight.w600),
+                  filled: true,
+                  fillColor: const Color(0xFFF5F5F5),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: isLoading
+                      ? null
+                      : () async {
+                          final value = int.tryParse(
+                              controller.text.replaceAll('.', ''));
+                          if (value == null || value <= 0) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Masukkan nominal valid'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                            return;
+                          }
+                          setSheetState(() => isLoading = true);
+                          if (!ctx.mounted) return;
+                          context
+                              .read<SavingsBloc>()
+                              .add(SavingsUpdateLimit(dailyLimit: value));
+                          Navigator.pop(ctx);
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: hijauUtama,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: isLoading
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2.5,
+                          ),
+                        )
+                      : const Text('Simpan Limit',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 15)),
+                ),
+              ),
             ],
           ),
         ),

@@ -17,15 +17,17 @@ class LoginResponseModel {
   });
 
   factory LoginResponseModel.fromJson(Map<String, dynamic> json) {
-    final data = json['data'] as Map<String, dynamic>;
+    final data = json['data'] as Map<String, dynamic>?;
     return LoginResponseModel(
-      success: json['success'] as bool,
-      message: json['message'] as String,
-      user: UserModel.fromJson(data['user'] as Map<String, dynamic>),
-      student: data['student'] != null
-          ? StudentModel.fromJson(data['student'] as Map<String, dynamic>)
+      success: json['success'] as bool? ?? false,
+      message: json['message'] as String? ?? '',
+      user: data != null && data['user'] != null
+          ? UserModel.fromJson(data['user'] as Map<String, dynamic>)
+          : UserModel(id: 0, name: '', username: '', role: '', phone: ''),
+      student: data?['student'] != null
+          ? StudentModel.fromJson(data!['student'] as Map<String, dynamic>)
           : null,
-      token: data['token'] as String,
+      token: data?['token'] as String? ?? '',
     );
   }
 }
