@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/models/dashboard_model.dart';
 import '../../../core/services/dashboard_service.dart';
 import '../../../core/services/profile_service.dart';
 import 'profile_event.dart';
@@ -12,6 +13,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     on<ProfileUploadPhoto>(_onUploadPhoto);
     on<ProfileDeletePhoto>(_onDeletePhoto);
     on<ProfileUpdateContact>(_onUpdateContact);
+    on<ProfileContactSaved>(_onContactSaved);
   }
 
   Future<void> _onFetch(
@@ -99,8 +101,8 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
 
       if (state is ProfileLoaded && state.dashboardData != null) {
         final student = state.dashboardData!.student;
-        fatherPhone = event.fatherPhone ?? student.fatherName;
-        motherPhone = event.motherPhone ?? student.motherName;
+        fatherPhone = event.fatherPhone ?? student.fatherPhone;
+        motherPhone = event.motherPhone ?? student.motherPhone;
         address = event.address ?? student.address;
       }
 
@@ -121,6 +123,31 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       emit(ProfileFailure(error: e.message));
     } catch (_) {
       emit(const ProfileFailure(error: 'Gagal memperbarui data'));
+    }
+  }
+
+  void _onContactSaved(
+    ProfileContactSaved event,
+    Emitter<ProfileState> emit,
+  ) {
+    final s = state;
+    if (s is ProfileLoaded && s.dashboardData != null) {
+      final student = s.dashboardData!.student;
+      final updated = student.copyWith(
+        fatherPhone: event.fatherPhone,
+        motherPhone: event.motherPhone,
+        address: event.address,
+      );
+      emit(ProfileLoaded(
+        dashboardData: DashboardData(
+          student: updated,
+          stats: s.dashboardData!.stats,
+          recentBills: s.dashboardData!.recentBills,
+          recentPayments: s.dashboardData!.recentPayments,
+          upcomingExams: s.dashboardData!.upcomingExams,
+        ),
+        photoBytes: s.photoBytes,
+      ));
     }
   }
 }

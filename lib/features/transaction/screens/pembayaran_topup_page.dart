@@ -1,22 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/services/savings_service.dart';
 import '../../../core/widgets/midtrans_webview.dart';
 
 class PembayaranTopUpPage extends StatefulWidget {
-  final Map<String, dynamic> snapData;
   final int nominal;
   final String metode;
   final String metodeLabel;
   final int currentBalance;
+  final String studentName;
 
   const PembayaranTopUpPage({
     super.key,
-    required this.snapData,
     required this.nominal,
     required this.metode,
     required this.metodeLabel,
     required this.currentBalance,
+    required this.studentName,
   });
 
   @override
@@ -27,14 +28,34 @@ class _PembayaranTopUpPageState extends State<PembayaranTopUpPage> {
   static const Color hijauUtama = Color(0xFF0EB89A);
 
   final _service = SavingsService();
+  bool _isLoadingTopUp = false;
   bool _isCheckingStatus = false;
   bool _paymentDone = false;
+  String _statusPembayaran = '';
+  String _orderId = '';
+  String _namaRekening = '';
 
   final formatRupiah = NumberFormat.currency(
     locale: 'id_ID',
     symbol: 'Rp ',
     decimalDigits: 0,
   );
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNamaRekening();
+  }
+
+  Future<void> _loadNamaRekening() async {
+    if (widget.studentName.isNotEmpty) {
+      _namaRekening = widget.studentName;
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    _namaRekening = prefs.getString('student_name') ?? 'Santri';
+    if (mounted) setState(() {});
+  }
 
   int get _biayaAdmin => 2500;
   int get _totalBayar => widget.nominal + _biayaAdmin;
@@ -57,50 +78,81 @@ class _PembayaranTopUpPageState extends State<PembayaranTopUpPage> {
   }
 
   Future<void> _bukaPembayaran() async {
-    final redirectUrl = widget.snapData['redirect_url'] as String?;
-    if (redirectUrl == null || redirectUrl.isEmpty) {
-      _showSnack('URL pembayaran tidak tersedia', isError: true);
-      return;
-    }
+    if (_isLoadingTopUp) return;
+    setState(() => _isLoadingTopUp = true);
 
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => MidtransWebView(
-          redirectUrl: redirectUrl,
-          orderId: widget.snapData['order_id'] as String? ?? '',
-          onFinished: () async {
-            await _cekStatusPembayaran();
-          },
+    try {
+      final result = await _service.topUp(
+        amount: widget.nominal,
+        paymentMethod: widget.metode,
+      );
+
+      if (!mounted) return;
+
+      if (result == null) {
+        _showSnack('Gagal membuat token pembayaran. Coba lagi.', isError: true);
+        setState(() => _isLoadingTopUp = false);
+        return;
+      }
+
+      final redirectUrl = result['redirect_url'] as String?;
+      final orderId = result['order_id'] as String? ?? '';
+
+      if (redirectUrl == null || redirectUrl.isEmpty) {
+        _showSnack('URL pembayaran tidak tersedia', isError: true);
+        setState(() => _isLoadingTopUp = false);
+        return;
+      }
+
+      _orderId = orderId;
+      setState(() => _isLoadingTopUp = false);
+
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => MidtransWebView(
+            redirectUrl: redirectUrl,
+            orderId: orderId,
+            onFinished: () async {
+              await _cekStatusPembayaran();
+            },
+          ),
         ),
-      ),
-    );
+      );
 
-    if (!_paymentDone) {
-      await _cekStatusPembayaran();
+      if (!_paymentDone) {
+        await _cekStatusPembayaran();
+      }
+
+      if (_statusPembayaran == 'success' && mounted) {
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingTopUp = false);
+        _showSnack('Tidak dapat terhubung ke server.', isError: true);
+      }
     }
   }
 
   Future<void> _cekStatusPembayaran() async {
-    final orderId = widget.snapData['order_id'] as String?;
-    if (orderId == null) return;
+    if (_orderId.isEmpty) return;
 
     setState(() => _isCheckingStatus = true);
 
     try {
-      final result = await _service.checkStatus(orderId);
+      final result = await _service.checkStatus(_orderId);
       if (!mounted) return;
 
       final status = result?['status'] as String? ?? 'pending';
       setState(() {
+        _statusPembayaran = status;
         _paymentDone =
             status == 'success' || status == 'failed' || status == 'expire';
         _isCheckingStatus = false;
       });
 
-      if (status == 'success') {
-        _showSuccessDialog();
-      } else if (status == 'failed' || status == 'expire') {
+      if (status == 'failed' || status == 'expire') {
         _showSnack(
           status == 'expire'
               ? 'Waktu pembayaran habis. Silakan coba lagi.'
@@ -123,99 +175,7 @@ class _PembayaranTopUpPageState extends State<PembayaranTopUpPage> {
     );
   }
 
-  void _showSuccessDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => Dialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 30, 24, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 68,
-                height: 68,
-                decoration: BoxDecoration(
-                  color: hijauUtama,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.check_rounded,
-                    color: Colors.white, size: 38),
-              ),
-              const SizedBox(height: 18),
-              const Text(
-                'Top Up Berhasil!',
-                style: TextStyle(
-                    color: Colors.black87,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Saldo tabungan berhasil ditambahkan sebesar ${formatRupiah.format(widget.nominal)}.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                    color: Colors.black54, fontSize: 13, height: 1.5),
-              ),
-              const SizedBox(height: 20),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: hijauUtama.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  children: [
-                    const Text(
-                      'Saldo Sekarang',
-                      style: TextStyle(
-                          color: Colors.black54,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      formatRupiah.format(_saldoSetelahTopUp),
-                      style: const TextStyle(
-                        color: hijauUtama,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                height: 46,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    Navigator.pop(context, true);
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: hijauUtama,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: const Text('Selesai',
-                      style: TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.w700)),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -319,7 +279,7 @@ class _PembayaranTopUpPageState extends State<PembayaranTopUpPage> {
                         const SizedBox(height: 16),
                         const Divider(color: Color(0xFFF0F0F0)),
                         const SizedBox(height: 14),
-                        _detailRow('Ke rekening', 'Ayna Mardea'),
+                        _detailRow('Ke rekening', _namaRekening),
                         const SizedBox(height: 10),
                         _detailRow(
                           'Saldo setelah top up',
@@ -383,7 +343,8 @@ class _PembayaranTopUpPageState extends State<PembayaranTopUpPage> {
               width: double.infinity,
               height: 50,
               child: ElevatedButton(
-                onPressed: _isCheckingStatus ? null : _bukaPembayaran,
+                onPressed:
+                    _isLoadingTopUp || _isCheckingStatus ? null : _bukaPembayaran,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: hijauUtama,
                   disabledBackgroundColor: hijauUtama.withValues(alpha: 0.4),
@@ -392,7 +353,7 @@ class _PembayaranTopUpPageState extends State<PembayaranTopUpPage> {
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14)),
                 ),
-                child: _isCheckingStatus
+                child: _isLoadingTopUp || _isCheckingStatus
                     ? const SizedBox(
                         width: 22,
                         height: 22,

@@ -21,6 +21,21 @@ class ProfileUploadPhoto extends ProfileEvent {
 
 class ProfileDeletePhoto extends ProfileEvent {}
 
+class ProfileContactSaved extends ProfileEvent {
+  final String fatherPhone;
+  final String motherPhone;
+  final String address;
+
+  const ProfileContactSaved({
+    required this.fatherPhone,
+    required this.motherPhone,
+    required this.address,
+  });
+
+  @override
+  List<Object> get props => [fatherPhone, motherPhone, address];
+}
+
 class ProfileUpdateContact extends ProfileEvent {
   final String? fatherPhone;
   final String? motherPhone;

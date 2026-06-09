@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../../../core/services/savings_service.dart';
 import 'pembayaran_topup_page.dart';
 
 class TopUpSaldoPage extends StatefulWidget {
   final int currentBalance;
+  final String studentName;
 
-  const TopUpSaldoPage({super.key, required this.currentBalance});
+  const TopUpSaldoPage({
+    super.key,
+    required this.currentBalance,
+    required this.studentName,
+  });
 
   @override
   State<TopUpSaldoPage> createState() => _TopUpSaldoPageState();
@@ -15,7 +19,6 @@ class TopUpSaldoPage extends StatefulWidget {
 class _TopUpSaldoPageState extends State<TopUpSaldoPage> {
   static const Color hijauUtama = Color(0xFF0EB89A);
 
-  final _service = SavingsService();
   bool _isLoading = false;
 
   final formatRupiah = NumberFormat.currency(
@@ -69,7 +72,6 @@ class _TopUpSaldoPageState extends State<TopUpSaldoPage> {
 
   @override
   void dispose() {
-    _service.dispose();
     super.dispose();
   }
 
@@ -81,46 +83,29 @@ class _TopUpSaldoPageState extends State<TopUpSaldoPage> {
     setState(() => _isLoading = true);
 
     try {
-      final result = await _service.topUp(
-        amount: selectedNominal!,
-        paymentMethod: selectedMetode,
-      );
-
       if (!mounted) return;
 
-      if (result != null) {
-        final kembali = await Navigator.push<bool>(
-          context,
-          MaterialPageRoute(
-            builder: (_) => PembayaranTopUpPage(
-              snapData: result,
-              nominal: selectedNominal!,
-              metode: selectedMetode!,
-              metodeLabel: metodeList
-                  .firstWhere((m) => m['id'] == selectedMetode)['label']
-                  as String,
-              currentBalance: widget.currentBalance,
-            ),
+      final kembali = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PembayaranTopUpPage(
+            nominal: selectedNominal!,
+            metode: selectedMetode!,
+            metodeLabel: metodeList
+                .firstWhere((m) => m['id'] == selectedMetode)['label']
+                as String,
+            currentBalance: widget.currentBalance,
+            studentName: widget.studentName,
           ),
-        );
+        ),
+      );
 
-        if (kembali == true && mounted) {
-          Navigator.pop(context, true);
-        }
-      } else {
-        _showError('Gagal membuat token pembayaran. Coba lagi.');
+      if (kembali == true && mounted) {
+        Navigator.pop(context, true);
       }
-    } catch (e) {
-      _showError('Tidak dapat terhubung ke server.');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  void _showError(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: Colors.red),
-    );
   }
 
   @override

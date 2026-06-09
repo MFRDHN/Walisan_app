@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -22,11 +23,25 @@ class SubjectGrade {
     required this.letterGrade,
   });
 
+  static num? _parseNum(dynamic v) {
+    if (v is num) return v;
+    if (v is String) return num.tryParse(v);
+    return null;
+  }
+
+  static int? _parseInt(dynamic v) {
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    if (v is String) return int.tryParse(v);
+    return null;
+  }
+
   factory SubjectGrade.fromJson(Map<String, dynamic> json) {
-    final score = (json['grade'] as num?)?.toDouble() ??
-        (json['score'] as num?)?.toDouble() ??
-        (json['nilai'] as num?)?.toDouble() ??
-        0;
+    final score = (_parseNum(json['grade']) ??
+            _parseNum(json['score']) ??
+            _parseNum(json['nilai']) ??
+            0)
+        .toDouble();
     return SubjectGrade(
       id: json['id'] as int? ?? 0,
       subjectName: json['subject_name'] as String? ??
@@ -34,7 +49,7 @@ class SubjectGrade {
           json['name'] as String? ??
           json['mata_pelajaran'] as String? ??
           '',
-      kkm: json['kkm'] as int? ?? 75,
+      kkm: _parseInt(json['kkm']) ?? 75,
       grade: score,
       letterGrade: json['letter_grade'] as String? ??
           json['huruf'] as String? ??
@@ -114,12 +129,13 @@ class ReportCard {
         json['kelas'] as String? ??
         '';
     final avg =
-        (json['average_score'] as num?)?.toDouble() ??
-            (json['rata_rata'] as num?)?.toDouble() ??
-            (json['average'] as num?)?.toDouble() ??
-            0;
-    final rnk = json['rank'] as int? ??
-        json['peringkat'] as int? ??
+        (SubjectGrade._parseNum(json['average_score']) ??
+            SubjectGrade._parseNum(json['rata_rata']) ??
+            SubjectGrade._parseNum(json['average']) ??
+            0)
+        .toDouble();
+    final rnk = SubjectGrade._parseInt(json['rank']) ??
+        SubjectGrade._parseInt(json['peringkat']) ??
         0;
 
     List<SubjectGrade> subjects;
@@ -136,13 +152,13 @@ class ReportCard {
           .toList();
     } else if (gradesRaw is Map<String, dynamic>) {
       subjects = gradesRaw.entries.map((e) {
+        final nilai = (SubjectGrade._parseNum(e.value) ?? 0).toDouble();
         return SubjectGrade(
           id: 0,
           subjectName: e.key,
           kkm: 75,
-          grade: (e.value as num).toDouble(),
-          letterGrade: SubjectGrade._calcLetterGrade(
-              (e.value as num).toDouble()),
+          grade: nilai,
+          letterGrade: SubjectGrade._calcLetterGrade(nilai),
         );
       }).toList();
     } else {
@@ -200,42 +216,9 @@ class _RapotOnlineScreenState extends State<RapotOnlineScreen> {
       _report = widget.reportCard!;
       _isLoading = false;
     } else {
-      _report = _buildDummyReport();
-      _isLoading = false;
+      _isLoading = true;
+      _fetchReport();
     }
-  }
-
-  ReportCard _buildDummyReport() {
-    final subjects = [
-      ('Al-Quran', 89),
-      ('Hadits', 78),
-      ('Fiqih', 91),
-      ('Aqidah', 92),
-      ('Bahasa Arab', 91),
-      ('Matematika', 87),
-      ('IPA', 92),
-      ('Bahasa Indonesia', 88),
-      ('Bahasa Inggris', 69),
-    ];
-    return ReportCard(
-      semester: 'Ganjil',
-      academicYear: '2024/2025',
-      className: '3A-PA',
-      average: 86.33,
-      rank: 3,
-      totalSubjects: subjects.length,
-      subjects: subjects.map((s) {
-        final grade = s.$2.toDouble();
-        return SubjectGrade(
-          id: 0,
-          subjectName: s.$1,
-          kkm: 75,
-          grade: grade,
-          letterGrade: SubjectGrade._calcLetterGrade(grade),
-        );
-      }).toList(),
-      achievement: 'Peringkat 3 di kelas 3A-PA',
-    );
   }
 
   Future<void> _fetchReport() async {
@@ -260,10 +243,11 @@ class _RapotOnlineScreenState extends State<RapotOnlineScreen> {
 
     try {
       await _fetchFromApi(prefs, token, headers);
-    } catch (_) {
+    } catch (e) {
       if (_loadCachedReport(prefs)) return;
+      if (!mounted) return;
       setState(() {
-        _errorMessage = 'Gagal memuat raport. Periksa koneksi Anda.';
+        _errorMessage = 'Gagal memuat raport. ${e.toString()}';
         _isLoading = false;
       });
     }
@@ -274,6 +258,7 @@ class _RapotOnlineScreenState extends State<RapotOnlineScreen> {
     String token,
     Map<String, String> headers,
   ) async {
+    if (!mounted) return;
     http.Response response;
     try {
       response = await http
@@ -283,22 +268,31 @@ class _RapotOnlineScreenState extends State<RapotOnlineScreen> {
           )
           .timeout(const Duration(seconds: 20));
     } on http.ClientException catch (e) {
-      // Connection-level error
       if (_loadCachedReport(prefs)) return;
+      if (!mounted) return;
       setState(() {
         _errorMessage = 'Gagal terhubung ke server. ${e.message}';
         _isLoading = false;
       });
       return;
+    } on TimeoutException {
+      if (_loadCachedReport(prefs)) return;
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = 'Server tidak merespon. Coba lagi nanti.';
+        _isLoading = false;
+      });
+      return;
     }
 
+    if (!mounted) return;
     final body = response.body;
     final isHtml = body.trimLeft().startsWith('<');
 
     if (response.statusCode == 200) {
       if (isHtml) {
-        // Server returned HTML instead of JSON – route mungkin belum ada
         if (_loadCachedReport(prefs)) return;
+        if (!mounted) return;
         setState(() {
           _errorMessage =
               'Server mengembalikan halaman HTML. Endpoint raport mungkin belum tersedia.';
@@ -312,6 +306,7 @@ class _RapotOnlineScreenState extends State<RapotOnlineScreen> {
         decoded = jsonDecode(body);
       } catch (_) {
         if (_loadCachedReport(prefs)) return;
+        if (!mounted) return;
         setState(() {
           _errorMessage = 'Response tidak valid dari server.';
           _isLoading = false;
@@ -321,6 +316,7 @@ class _RapotOnlineScreenState extends State<RapotOnlineScreen> {
 
       if (decoded is! Map<String, dynamic>) {
         if (_loadCachedReport(prefs)) return;
+        if (!mounted) return;
         setState(() {
           _errorMessage = 'Format data raport tidak valid.';
           _isLoading = false;
@@ -341,6 +337,7 @@ class _RapotOnlineScreenState extends State<RapotOnlineScreen> {
           if (detail != null) {
             _report = ReportCard.fromJson(detail);
             _cacheReport(prefs, detail);
+            if (!mounted) return;
             setState(() {
               _isLoading = false;
               _errorMessage = null;
@@ -351,6 +348,7 @@ class _RapotOnlineScreenState extends State<RapotOnlineScreen> {
         }
         _report = ReportCard.fromJson(firstReport);
         _cacheReport(prefs, firstReport);
+        if (!mounted) return;
         setState(() {
           _isLoading = false;
           _errorMessage = null;
@@ -360,6 +358,7 @@ class _RapotOnlineScreenState extends State<RapotOnlineScreen> {
       } else if (data is Map<String, dynamic>) {
         _report = ReportCard.fromJson(data);
         _cacheReport(prefs, data);
+        if (!mounted) return;
         setState(() {
           _isLoading = false;
           _errorMessage = null;
@@ -369,13 +368,14 @@ class _RapotOnlineScreenState extends State<RapotOnlineScreen> {
       }
 
       if (_loadCachedReport(prefs)) return;
+      if (!mounted) return;
       setState(() {
         _errorMessage = 'Data raport tidak tersedia.';
         _isLoading = false;
       });
     } else {
-      // Non-200
       if (_loadCachedReport(prefs)) return;
+      if (!mounted) return;
       String message;
       if (isHtml) {
         message =

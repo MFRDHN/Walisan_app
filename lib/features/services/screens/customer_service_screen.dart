@@ -4,18 +4,28 @@ import 'package:url_launcher/url_launcher.dart';
 class CustomerServiceScreen extends StatelessWidget {
   const CustomerServiceScreen({super.key});
 
-  static const String _waNumber = '62123456788';
+  static const String _waNumber = '6282173774337';
 
   Future<void> _openWhatsApp(BuildContext context) async {
-    final uri = Uri.parse('https://wa.me/$_waNumber');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
+    final waUri = Uri.parse('whatsapp://send?phone=$_waNumber');
+    final waWebUri = Uri.parse(
+        'https://wa.me/$_waNumber?text=Halo%20saya%20ingin%20bertanya');
+
+    try {
+      final launched =
+          await launchUrl(waUri, mode: LaunchMode.externalApplication);
+      if (launched) return;
+    } catch (_) {}
+
+    try {
+      await launchUrl(waWebUri, mode: LaunchMode.externalApplication);
+    } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('WhatsApp tidak dapat dibuka.'),
+          SnackBar(
+            content: Text('Tidak dapat membuka WhatsApp. Buka manual di wa.me/$_waNumber'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
           ),
         );
       }

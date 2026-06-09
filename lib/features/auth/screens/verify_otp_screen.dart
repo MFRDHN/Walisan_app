@@ -121,6 +121,10 @@ class _VerifyOtpViewState extends State<VerifyOtpView> {
   ) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('token', state.loginResponse.token);
+    final studentName = state.loginResponse.student?.name ?? state.loginResponse.user.name;
+    if (studentName.isNotEmpty) {
+      await prefs.setString('student_name', studentName);
+    }
     final loginData = jsonEncode({
       'user': state.loginResponse.user.toJson(),
       'student': state.loginResponse.student?.toJson(),

@@ -125,7 +125,7 @@ class LoginScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 20),
-          _buildWhatsappButton(onPressed: () {}),
+          _buildWhatsappButton(onPressed: () => Navigator.pushNamed(context, '/customer-service')),
         ],
       ),
     );

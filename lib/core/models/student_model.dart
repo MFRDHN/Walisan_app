@@ -71,6 +71,54 @@ class StudentModel {
     );
   }
 
+  StudentModel copyWith({
+    int? id,
+    int? userId,
+    String? name,
+    String? nis,
+    String? nisn,
+    String? studentClass,
+    String? room,
+    String? enrollmentYear,
+    String? fatherName,
+    String? motherName,
+    String? fatherPhone,
+    String? motherPhone,
+    String? barcodeId,
+    String? photo,
+    String? photoUrl,
+    String? birthDate,
+    String? gender,
+    String? address,
+    String? status,
+    bool? isClaimed,
+    String? createdAt,
+  }) {
+    return StudentModel(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      name: name ?? this.name,
+      nis: nis ?? this.nis,
+      nisn: nisn ?? this.nisn,
+      studentClass: studentClass ?? this.studentClass,
+      room: room ?? this.room,
+      enrollmentYear: enrollmentYear ?? this.enrollmentYear,
+      fatherName: fatherName ?? this.fatherName,
+      motherName: motherName ?? this.motherName,
+      fatherPhone: fatherPhone ?? this.fatherPhone,
+      motherPhone: motherPhone ?? this.motherPhone,
+      barcodeId: barcodeId ?? this.barcodeId,
+      photo: photo ?? this.photo,
+      photoUrl: photoUrl ?? this.photoUrl,
+      birthDate: birthDate ?? this.birthDate,
+      gender: gender ?? this.gender,
+      address: address ?? this.address,
+      status: status ?? this.status,
+      isClaimed: isClaimed ?? this.isClaimed,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,

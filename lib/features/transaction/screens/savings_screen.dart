@@ -251,7 +251,10 @@ class _SavingsViewState extends State<_SavingsView>
                   child: _buildCardButton(
                     icon: Icons.add_rounded,
                     label: 'Top Up Saldo',
-                    onTap: () => _showTopUpDialog(context, data?.balance ?? 0),
+                    onTap: () => _showTopUpDialog(
+                        context,
+                        data?.balance ?? 0,
+                        data?.studentName ?? 'Santri'),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -468,14 +471,18 @@ class _SavingsViewState extends State<_SavingsView>
     );
   }
 
-  Future<void> _showTopUpDialog(BuildContext context, int balance) async {
-    await Navigator.push(
+  Future<void> _showTopUpDialog(
+      BuildContext context, int balance, String studentName) async {
+    final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => TopUpSaldoPage(currentBalance: balance),
+        builder: (_) => TopUpSaldoPage(
+          currentBalance: balance,
+          studentName: studentName,
+        ),
       ),
     );
-    if (context.mounted) {
+    if (result == true && context.mounted) {
       context.read<SavingsBloc>().add(SavingsFetch());
     }
   }

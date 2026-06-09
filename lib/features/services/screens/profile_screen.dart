@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:barcode_widget/barcode_widget.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/models/dashboard_model.dart';
+import '../../../core/services/profile_service.dart';
 import '../bloc/profile_bloc.dart';
 import '../bloc/profile_event.dart';
 import '../bloc/profile_state.dart';
@@ -416,9 +417,7 @@ class _ProfileViewState extends State<_ProfileView> {
             onTap: () => _showEditDialog(
               title: 'NO WA AYAH',
               currentValue: _v(m, 'father_phone'),
-              onSave: (value) => context
-                  .read<ProfileBloc>()
-                  .add(ProfileUpdateContact(fatherPhone: value)),
+              field: 'father_phone',
             ),
           ),
           _buildContactItem(
@@ -429,9 +428,7 @@ class _ProfileViewState extends State<_ProfileView> {
             onTap: () => _showEditDialog(
               title: 'NO WA IBU',
               currentValue: _v(m, 'mother_phone'),
-              onSave: (value) => context
-                  .read<ProfileBloc>()
-                  .add(ProfileUpdateContact(motherPhone: value)),
+              field: 'mother_phone',
             ),
           ),
           _buildContactItem(
@@ -442,9 +439,7 @@ class _ProfileViewState extends State<_ProfileView> {
             onTap: () => _showEditDialog(
               title: 'Alamat',
               currentValue: _v(m, 'address'),
-              onSave: (value) => context
-                  .read<ProfileBloc>()
-                  .add(ProfileUpdateContact(address: value)),
+              field: 'address',
             ),
           ),
         ],
@@ -597,7 +592,7 @@ class _ProfileViewState extends State<_ProfileView> {
   Future<void> _showEditDialog({
     required String title,
     required String currentValue,
-    required void Function(String) onSave,
+    required String field,
   }) async {
     final controller = TextEditingController(text: currentValue);
     final result = await showDialog<String>(
@@ -623,10 +618,67 @@ class _ProfileViewState extends State<_ProfileView> {
         ],
       ),
     );
-    if (result != null && result.isNotEmpty) {
-      onSave(result);
-    }
     controller.dispose();
+
+    if (result == null || result.isEmpty || result == currentValue) return;
+
+    final bState = context.read<ProfileBloc>().state;
+    String fatherPhone = '';
+    String motherPhone = '';
+    String address = '';
+
+    if (field == 'father_phone') {
+      fatherPhone = result;
+      if (bState is ProfileLoaded && bState.dashboardData != null) {
+        motherPhone = bState.dashboardData!.student.motherPhone;
+        address = bState.dashboardData!.student.address;
+      }
+    } else if (field == 'mother_phone') {
+      motherPhone = result;
+      if (bState is ProfileLoaded && bState.dashboardData != null) {
+        fatherPhone = bState.dashboardData!.student.fatherPhone;
+        address = bState.dashboardData!.student.address;
+      }
+    } else {
+      address = result;
+      if (bState is ProfileLoaded && bState.dashboardData != null) {
+        fatherPhone = bState.dashboardData!.student.fatherPhone;
+        motherPhone = bState.dashboardData!.student.motherPhone;
+      }
+    }
+
+    final service = ProfileService();
+    final success = await service.updateContact(
+      fatherPhone: fatherPhone,
+      motherPhone: motherPhone,
+      address: address,
+    );
+    service.dispose();
+
+    if (!context.mounted) return;
+
+    if (success) {
+      _student[field] = result;
+      context.read<ProfileBloc>().add(ProfileContactSaved(
+        fatherPhone: fatherPhone,
+        motherPhone: motherPhone,
+        address: address,
+      ));
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Data berhasil diperbarui'),
+          backgroundColor: Color(0xFF0EA473),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Gagal memperbarui data'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Future<void> _showPhotoOptions() async {
